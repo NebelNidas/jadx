@@ -62,7 +62,7 @@ public class ProjectData {
 	/**
 	 *
 	 * @param openTabs
-	 * @return <code>true></code> if a change was saved
+	 * @return <code>true</code> if a change was saved
 	 */
 	public boolean setOpenTabs(List<TabViewState> openTabs) {
 		if (this.openTabs.equals(openTabs)) {
@@ -79,7 +79,7 @@ public class ProjectData {
 	/**
 	 *
 	 * @param activeTab
-	 * @return <code>true></code> if a change was saved
+	 * @return <code>true</code> if a change was saved
 	 */
 	public boolean setActiveTab(int activeTab) {
 		if (this.activeTab == activeTab) {
