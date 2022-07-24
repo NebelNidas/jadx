@@ -74,6 +74,7 @@ javadoc {
 	if (JavaVersion.current().isJava9Compatible()) {
 		options.addBooleanOption('html5', true)
 	}
+    options.encoding = 'UTF-8'
 	// disable 'missing' warnings
 	options.addStringOption('Xdoclint:all,-missing', '-quiet')
 }

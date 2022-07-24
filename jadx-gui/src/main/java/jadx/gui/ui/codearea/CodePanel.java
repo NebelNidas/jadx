@@ -38,7 +38,7 @@ import jadx.gui.utils.NLS;
 import jadx.gui.utils.UiUtils;
 
 /**
- * A panel combining a {@link SearchBar and a scollable {@link CodeArea}
+ * A panel combining a {@link SearchBar} and a scollable {@link CodeArea}
  */
 public class CodePanel extends JPanel {
 	private static final Logger LOG = LoggerFactory.getLogger(CodePanel.class);
