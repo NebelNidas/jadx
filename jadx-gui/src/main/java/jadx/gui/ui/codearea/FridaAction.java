@@ -14,12 +14,10 @@ import org.slf4j.LoggerFactory;
 
 import jadx.api.JavaClass;
 import jadx.api.JavaField;
-import jadx.api.JavaMethod;
 import jadx.api.metadata.annotations.VarNode;
 import jadx.core.codegen.TypeGen;
 import jadx.core.dex.info.MethodInfo;
 import jadx.core.dex.instructions.args.ArgType;
-import jadx.core.dex.nodes.ClassNode;
 import jadx.core.dex.nodes.MethodNode;
 import jadx.core.utils.exceptions.JadxRuntimeException;
 import jadx.gui.treemodel.JClass;
@@ -72,48 +70,51 @@ public final class FridaAction extends JNodeAction {
 	}
 
 	private String generateMethodSnippet(JMethod jMth) {
-		JavaMethod javaMethod = jMth.getJavaMethod();
-		MethodInfo methodInfo = javaMethod.getMethodNode().getMethodInfo();
-		String methodName = StringEscapeUtils.escapeEcmaScript(methodInfo.getName());
-		String callMethodName = methodName;
-
+		MethodNode mth = jMth.getJavaMethod().getMethodNode();
+		MethodInfo methodInfo = mth.getMethodInfo();
+		String methodName;
 		if (methodInfo.isConstructor()) {
 			methodName = "$init";
-			callMethodName = "$new";
-		}
-		String shortClassName = javaMethod.getDeclaringClass().getName();
-
-		String functionUntilImplementation;
-		if (isOverloaded(javaMethod.getMethodNode())) {
-			List<ArgType> methodArgs = methodInfo.getArgumentsTypes();
-			String overloadStr = methodArgs.stream().map(this::parseArgType).collect(Collectors.joining(", "));
-			functionUntilImplementation = String.format("%s[\"%s\"].overload(%s).implementation", shortClassName, methodName, overloadStr);
 		} else {
-			functionUntilImplementation = String.format("%s[\"%s\"].implementation", shortClassName, methodName);
+			methodName = StringEscapeUtils.escapeEcmaScript(methodInfo.getName());
 		}
-
-		List<String> methodArgNames = new ArrayList<>();
-		for (VarNode arg : javaMethod.getMethodNode().collectArgsWithoutLoading()) {
-			methodArgNames.add(arg.getName());
+		String overload;
+		if (isOverloaded(mth)) {
+			String overloadArgs = methodInfo.getArgumentsTypes().stream()
+					.map(this::parseArgType).collect(Collectors.joining(", "));
+			overload = ".overload(" + overloadArgs + ")";
+		} else {
+			overload = "";
 		}
-
-		String functionParametersString = String.join(", ", methodArgNames);
-		String logParametersString =
-				methodArgNames.stream().map(e -> String.format("'%s: ' + %s", e, e)).collect(Collectors.joining(" + ', ' + "));
-		if (logParametersString.length() > 0) {
-			logParametersString = " + ', ' + " + logParametersString;
+		List<String> argNames = new ArrayList<>();
+		for (VarNode arg : jMth.getJavaMethod().getMethodNode().collectArgsWithoutLoading()) {
+			argNames.add(arg.getName());
 		}
-		String functionParameterAndBody = String.format(
-				"%s = function (%s) {\n"
-						+ "    console.log('%s is called'%s);\n"
-						+ "    let ret = this.%s(%s);\n"
-						+ "    console.log('%s ret value is ' + ret);\n"
-						+ "    return ret;\n"
-						+ "};",
-				functionUntilImplementation, functionParametersString, methodName, logParametersString, callMethodName,
-				functionParametersString, methodName);
-
-		return generateClassSnippet(jMth.getJParent()) + "\n" + functionParameterAndBody;
+		String args = String.join(", ", argNames);
+		String logArgs;
+		if (argNames.isEmpty()) {
+			logArgs = "";
+		} else {
+			String joinStr = " + ', ' + ";
+			logArgs = joinStr + argNames.stream().map(a -> "'" + a + ": ' + " + a).collect(Collectors.joining(joinStr));
+		}
+		String shortClassName = mth.getParentClass().getShortName();
+		String classSnippet = generateClassSnippet(jMth.getJParent());
+		if (methodInfo.isConstructor() || methodInfo.getReturnType() == ArgType.VOID) {
+			// no return value
+			return classSnippet + "\n"
+					+ shortClassName + "[\"" + methodName + "\"]" + overload + ".implementation = function (" + args + ") {\n"
+					+ "    console.log('" + shortClassName + "." + methodName + " is called'" + logArgs + ");\n"
+					+ "    this[\"" + methodName + "\"](" + args + ");\n"
+					+ "};";
+		}
+		return classSnippet + "\n"
+				+ shortClassName + "[\"" + methodName + "\"]" + overload + ".implementation = function (" + args + ") {\n"
+				+ "    console.log('" + shortClassName + "." + methodName + " is called'" + logArgs + ");\n"
+				+ "    let ret = this[\"" + methodName + "\"](" + args + ");\n"
+				+ "    console.log('" + shortClassName + "." + methodName + " return: ' + ret);\n"
+				+ "    return ret;\n"
+				+ "};";
 	}
 
 	private String generateClassSnippet(JClass jc) {
@@ -135,27 +136,24 @@ public final class FridaAction extends JNodeAction {
 				break;
 			}
 		}
-
 		JClass jc = jf.getRootClass();
 		String classSnippet = generateClassSnippet(jc);
 		return String.format("%s\n%s = %s.%s.value;", classSnippet, fieldName, jc.getName(), rawFieldName);
 	}
 
 	public Boolean isOverloaded(MethodNode methodNode) {
-		ClassNode parentClass = methodNode.getParentClass();
-		List<MethodNode> methods = parentClass.getMethods();
-		return methods.stream()
+		return methodNode.getParentClass().getMethods().stream()
 				.anyMatch(m -> m.getName().equals(methodNode.getName())
 						&& !Objects.equals(methodNode.getMethodInfo().getShortId(), m.getMethodInfo().getShortId()));
 	}
 
 	private String parseArgType(ArgType x) {
-		StringBuilder parsedArgType = new StringBuilder("'");
+		String typeStr;
 		if (x.isArray()) {
-			parsedArgType.append(TypeGen.signature(x).replace("/", "."));
+			typeStr = TypeGen.signature(x).replace("/", ".");
 		} else {
-			parsedArgType.append(x);
+			typeStr = x.toString();
 		}
-		return parsedArgType.append("'").toString();
+		return "'" + typeStr + "'";
 	}
 }

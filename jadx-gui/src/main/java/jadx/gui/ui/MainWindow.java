@@ -23,6 +23,7 @@ import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
 import java.awt.event.WindowAdapter;
 import java.awt.event.WindowEvent;
+import java.awt.geom.AffineTransform;
 import java.io.IOException;
 import java.io.InputStream;
 import java.net.URL;
@@ -124,10 +125,11 @@ import jadx.gui.ui.codearea.EditorTheme;
 import jadx.gui.ui.codearea.EditorViewState;
 import jadx.gui.ui.dialog.ADBDialog;
 import jadx.gui.ui.dialog.AboutDialog;
-import jadx.gui.ui.dialog.FileDialog;
 import jadx.gui.ui.dialog.LogViewerDialog;
 import jadx.gui.ui.dialog.RenameDialog;
 import jadx.gui.ui.dialog.SearchDialog;
+import jadx.gui.ui.filedialog.FileDialogWrapper;
+import jadx.gui.ui.filedialog.FileOpenMode;
 import jadx.gui.ui.panel.ContentPanel;
 import jadx.gui.ui.panel.IssuesPanel;
 import jadx.gui.ui.panel.JDebuggerPanel;
@@ -140,6 +142,7 @@ import jadx.gui.update.JadxUpdate.IUpdateCallback;
 import jadx.gui.update.data.Release;
 import jadx.gui.utils.CacheObject;
 import jadx.gui.utils.FontUtils;
+import jadx.gui.utils.ILoadListener;
 import jadx.gui.utils.Icons;
 import jadx.gui.utils.LafManager;
 import jadx.gui.utils.Link;
@@ -149,6 +152,7 @@ import jadx.gui.utils.UiUtils;
 import jadx.gui.utils.fileswatcher.LiveReloadWorker;
 import jadx.gui.utils.logs.LogCollector;
 import jadx.gui.utils.ui.ActionHandler;
+import jadx.gui.utils.ui.NodeLabel;
 
 import static io.reactivex.internal.functions.Functions.EMPTY_RUNNABLE;
 import static javax.swing.KeyStroke.getKeyStroke;
@@ -224,6 +228,9 @@ public class MainWindow extends JFrame {
 
 	private JDebuggerPanel debuggerPanel;
 	private JSplitPane verticalSplitter;
+
+	private List<ILoadListener> loadListeners = new ArrayList<>();
+	private boolean loaded;
 
 	public MainWindow(JadxSettings settings) {
 		this.settings = settings;
@@ -302,19 +309,19 @@ public class MainWindow extends JFrame {
 	}
 
 	public void openFileDialog() {
-		showOpenDialog(FileDialog.OpenMode.OPEN);
+		showOpenDialog(FileOpenMode.OPEN);
 	}
 
 	public void openProjectDialog() {
-		showOpenDialog(FileDialog.OpenMode.OPEN_PROJECT);
+		showOpenDialog(FileOpenMode.OPEN_PROJECT);
 	}
 
-	private void showOpenDialog(FileDialog.OpenMode mode) {
+	private void showOpenDialog(FileOpenMode mode) {
 		saveAll();
 		if (!ensureProjectIsSaved()) {
 			return;
 		}
-		FileDialog fileDialog = new FileDialog(this, mode);
+		FileDialogWrapper fileDialog = new FileDialogWrapper(this, mode);
 		List<Path> openPaths = fileDialog.show();
 		if (!openPaths.isEmpty()) {
 			settings.setLastOpenFilePath(fileDialog.getCurrentDir());
@@ -323,7 +330,7 @@ public class MainWindow extends JFrame {
 	}
 
 	public void addFiles() {
-		FileDialog fileDialog = new FileDialog(this, FileDialog.OpenMode.ADD);
+		FileDialogWrapper fileDialog = new FileDialogWrapper(this, FileOpenMode.ADD);
 		List<Path> addPaths = fileDialog.show();
 		if (!addPaths.isEmpty()) {
 			addFiles(addPaths);
@@ -354,7 +361,7 @@ public class MainWindow extends JFrame {
 	}
 
 	private void saveProjectAs() {
-		FileDialog fileDialog = new FileDialog(this, FileDialog.OpenMode.SAVE_PROJECT);
+		FileDialogWrapper fileDialog = new FileDialogWrapper(this, FileOpenMode.SAVE_PROJECT);
 		if (project.getFilePaths().size() == 1) {
 			// If there is only one file loaded we suggest saving the jadx project file next to the loaded file
 			Path projectPath = getProjectPathForFile(this.project.getFilePaths().get(0));
@@ -385,7 +392,7 @@ public class MainWindow extends JFrame {
 	}
 
 	private void openMappings(MappingFormat mappingFormat) {
-		FileDialog fileDialog = new FileDialog(this, FileDialog.OpenMode.CUSTOM_OPEN);
+		FileDialogWrapper fileDialog = new FileDialogWrapper(this, FileOpenMode.CUSTOM_OPEN);
 		fileDialog.setTitle(NLS.str("file.open_mappings"));
 		if (mappingFormat.hasSingleFile()) {
 			fileDialog.setFileExtList(Collections.singletonList(mappingFormat.fileExt));
@@ -460,13 +467,17 @@ public class MainWindow extends JFrame {
 	}
 
 	private void saveMappingsAs(MappingFormat mappingFormat) {
-		FileDialog fileDialog = new FileDialog(this, FileDialog.OpenMode.CUSTOM_SAVE);
+		FileDialogWrapper fileDialog = new FileDialogWrapper(this, FileOpenMode.CUSTOM_SAVE);
 		fileDialog.setTitle(NLS.str("file.save_mappings_as"));
 		if (mappingFormat.hasSingleFile()) {
 			fileDialog.setSelectedFile(fileDialog.getCurrentDir().resolve("mappings." + mappingFormat.fileExt));
 			fileDialog.setFileExtList(Collections.singletonList(mappingFormat.fileExt));
 			fileDialog.setSelectionMode(JFileChooser.FILES_ONLY);
 		} else {
+			Path workingDir = project.getWorkingDir();
+			if (workingDir != null) {
+				fileDialog.setCurrentDir(workingDir);
+			}
 			fileDialog.setSelectionMode(JFileChooser.DIRECTORIES_ONLY);
 		}
 		List<Path> selectedPaths = fileDialog.show();
@@ -479,8 +490,8 @@ public class MainWindow extends JFrame {
 		if (mappingFormat.hasSingleFile() && !savePath.getFileName().toString().toLowerCase(Locale.ROOT).endsWith(mappingFormat.fileExt)) {
 			savePath = savePath.resolveSibling(savePath.getFileName() + "." + mappingFormat.fileExt);
 		}
-		// If the target file already exists (and it's not an empty directory), show an overwrite
-		// confirmation
+		// If the target file already exists (and it's not an empty directory),
+		// show an overwrite confirmation
 		if (Files.exists(savePath)) {
 			boolean emptyDir = false;
 			try (Stream<Path> entries = Files.list(savePath)) {
@@ -639,6 +650,7 @@ public class MainWindow extends JFrame {
 	}
 
 	private void closeAll(boolean reopening) {
+		notifyLoadListeners(false);
 		cancelBackgroundJobs();
 		clearTree();
 		if (projectOpen) {
@@ -683,7 +695,10 @@ public class MainWindow extends JFrame {
 		BreakpointManager.init(project.getFilePaths().get(0).toAbsolutePath().getParent());
 		backgroundExecutor.execute(NLS.str("progress.load"),
 				this::restoreOpenTabs,
-				status -> runInitialBackgroundJobs());
+				status -> {
+					runInitialBackgroundJobs();
+					notifyLoadListeners(true);
+				});
 	}
 
 	public void updateLiveReload(boolean state) {
@@ -764,8 +779,6 @@ public class MainWindow extends JFrame {
 
 	protected void resetCache() {
 		cacheObject.reset();
-		cacheObject.setJRoot(treeRoot);
-		cacheObject.setJadxSettings(settings);
 	}
 
 	synchronized void runInitialBackgroundJobs() {
@@ -828,7 +841,7 @@ public class MainWindow extends JFrame {
 	}
 
 	private void saveAll(boolean export) {
-		FileDialog fileDialog = new FileDialog(this, FileDialog.OpenMode.EXPORT);
+		FileDialogWrapper fileDialog = new FileDialogWrapper(this, FileOpenMode.EXPORT);
 		List<Path> saveDirs = fileDialog.show();
 		if (saveDirs.isEmpty()) {
 			return;
@@ -848,13 +861,11 @@ public class MainWindow extends JFrame {
 
 	public void initTree() {
 		treeRoot = new JRoot(wrapper);
-		cacheObject.setJRoot(treeRoot);
 		treeRoot.setFlatPackages(isFlattenPackage);
 		treeModel.setRoot(treeRoot);
 		addTreeCustomNodes();
 		treeRoot.update();
 		reloadTree();
-		cacheObject.setJadxSettings(settings);
 	}
 
 	private void clearTree() {
@@ -1434,6 +1445,22 @@ public class MainWindow extends JFrame {
 		toolbar.add(updateLink);
 
 		mainPanel.add(toolbar, BorderLayout.NORTH);
+
+		addLoadListener(loaded -> {
+			textSearchAction.setEnabled(loaded);
+			clsSearchAction.setEnabled(loaded);
+			commentSearchAction.setEnabled(loaded);
+			backAction.setEnabled(loaded);
+			forwardAction.setEnabled(loaded);
+			syncAction.setEnabled(loaded);
+			saveAllAction.setEnabled(loaded);
+			exportAction.setEnabled(loaded);
+			saveProjectAsAction.setEnabled(loaded);
+			reload.setEnabled(loaded);
+			deobfAction.setEnabled(loaded);
+			quarkAction.setEnabled(loaded);
+			return false;
+		});
 	}
 
 	private void initUI() {
@@ -1485,6 +1512,7 @@ public class MainWindow extends JFrame {
 				Component c = super.getTreeCellRendererComponent(tree, value, selected, expanded, isLeaf, row, focused);
 				if (value instanceof JNode) {
 					JNode jNode = (JNode) value;
+					NodeLabel.disableHtml(this, jNode.disableHtml());
 					setText(jNode.makeStringHtml());
 					setIcon(jNode.getIcon());
 					setToolTipText(jNode.getTooltip());
@@ -1624,8 +1652,9 @@ public class MainWindow extends JFrame {
 		}
 		GraphicsDevice gd = GraphicsEnvironment.getLocalGraphicsEnvironment().getDefaultScreenDevice();
 		DisplayMode mode = gd.getDisplayMode();
-		int w = mode.getWidth();
-		int h = mode.getHeight();
+		AffineTransform trans = gd.getDefaultConfiguration().getDefaultTransform();
+		int w = (int) (mode.getWidth() / trans.getScaleX());
+		int h = (int) (mode.getHeight() / trans.getScaleY());
 		setBounds((int) (w * BORDER_RATIO), (int) (h * BORDER_RATIO),
 				(int) (w * WINDOW_RATIO), (int) (h * WINDOW_RATIO));
 		setLocationRelativeTo(null);
@@ -1721,6 +1750,17 @@ public class MainWindow extends JFrame {
 		settings.setMainWindowVerticalSplitterLoc(verticalSplitter.getDividerLocation());
 		settings.setDebuggerStackFrameSplitterLoc(debuggerPanel.getLeftSplitterLocation());
 		settings.setDebuggerVarTreeSplitterLoc(debuggerPanel.getRightSplitterLocation());
+	}
+
+	public void addLoadListener(ILoadListener loadListener) {
+		this.loadListeners.add(loadListener);
+		// set initial value
+		loadListener.update(loaded);
+	}
+
+	public void notifyLoadListeners(boolean loaded) {
+		this.loaded = loaded;
+		loadListeners.removeIf(listener -> listener.update(loaded));
 	}
 
 	public JadxWrapper getWrapper() {

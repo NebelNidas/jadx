@@ -4,6 +4,7 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Set;
+import java.util.function.Consumer;
 
 import org.jetbrains.annotations.Nullable;
 
@@ -22,9 +23,12 @@ import jadx.core.dex.nodes.IRegion;
 import jadx.core.dex.nodes.InsnNode;
 import jadx.core.dex.nodes.MethodNode;
 import jadx.core.dex.regions.Region;
+import jadx.core.dex.regions.loops.LoopRegion;
 import jadx.core.dex.trycatch.CatchAttr;
 import jadx.core.dex.trycatch.ExceptionHandler;
 import jadx.core.dex.trycatch.TryCatchBlockAttr;
+import jadx.core.dex.visitors.regions.AbstractRegionVisitor;
+import jadx.core.dex.visitors.regions.DepthRegionTraversal;
 import jadx.core.utils.exceptions.JadxRuntimeException;
 
 public class RegionUtils {
@@ -143,20 +147,6 @@ public class RegionUtils {
 		} else {
 			throw new JadxRuntimeException(unknownContainerType(container));
 		}
-	}
-
-	@Nullable
-	public static IContainer getLastRegion(@Nullable IContainer container) {
-		if (container == null) {
-			return null;
-		}
-		if (container instanceof IBlock || container instanceof IBranchRegion) {
-			return container;
-		}
-		if (container instanceof IRegion) {
-			return getLastRegion(Utils.last(((IRegion) container).getSubBlocks()));
-		}
-		throw new JadxRuntimeException(unknownContainerType(container));
 	}
 
 	public static boolean isExitBlock(MethodNode mth, IContainer container) {
@@ -289,7 +279,11 @@ public class RegionUtils {
 				}
 			}
 			return false;
-		} else if (container instanceof IRegion) {
+		}
+		if (container instanceof LoopRegion) {
+			return true;
+		}
+		if (container instanceof IRegion) {
 			IRegion region = (IRegion) container;
 			for (IContainer block : region.getSubBlocks()) {
 				if (notEmpty(block)) {
@@ -297,9 +291,8 @@ public class RegionUtils {
 				}
 			}
 			return false;
-		} else {
-			throw new JadxRuntimeException(unknownContainerType(container));
 		}
+		throw new JadxRuntimeException(unknownContainerType(container));
 	}
 
 	public static void getAllRegionBlocks(IContainer container, Set<IBlock> blocks) {
@@ -482,5 +475,14 @@ public class RegionUtils {
 			return "Null container variable";
 		}
 		return "Unknown container type: " + container.getClass();
+	}
+
+	public static void visitBlocks(MethodNode mth, IContainer container, Consumer<IBlock> visitor) {
+		DepthRegionTraversal.traverse(mth, container, new AbstractRegionVisitor() {
+			@Override
+			public void processBlock(MethodNode mth, IBlock block) {
+				visitor.accept(block);
+			}
+		});
 	}
 }

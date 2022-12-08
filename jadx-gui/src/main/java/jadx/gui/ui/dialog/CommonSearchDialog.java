@@ -55,6 +55,7 @@ import jadx.gui.utils.JNodeCache;
 import jadx.gui.utils.JumpPosition;
 import jadx.gui.utils.NLS;
 import jadx.gui.utils.UiUtils;
+import jadx.gui.utils.ui.NodeLabel;
 
 import static javax.swing.ScrollPaneConstants.HORIZONTAL_SCROLLBAR_AS_NEEDED;
 import static javax.swing.ScrollPaneConstants.VERTICAL_SCROLLBAR_AS_NEEDED;
@@ -150,11 +151,16 @@ public abstract class CommonSearchDialog extends JFrame {
 
 	@Nullable
 	private JNode getSelectedNode() {
-		int selectedId = resultsTable.getSelectedRow();
-		if (selectedId == -1) {
+		try {
+			int selectedId = resultsTable.getSelectedRow();
+			if (selectedId == -1 || selectedId >= resultsTable.getRowCount()) {
+				return null;
+			}
+			return (JNode) resultsModel.getValueAt(selectedId, 0);
+		} catch (Exception e) {
+			LOG.error("Failed to get results table selected object", e);
 			return null;
 		}
-		return (JNode) resultsModel.getValueAt(selectedId, 0);
 	}
 
 	@Override
@@ -397,9 +403,9 @@ public abstract class CommonSearchDialog extends JFrame {
 	}
 
 	protected final class ResultsTableCellRenderer implements TableCellRenderer {
-		private final JLabel label;
+		private final NodeLabel label;
 		private final RSyntaxTextArea codeArea;
-		private final JLabel emptyLabel;
+		private final NodeLabel emptyLabel;
 		private final Color codeSelectedColor;
 		private final Color codeBackground;
 
@@ -409,17 +415,20 @@ public abstract class CommonSearchDialog extends JFrame {
 			codeArea.setRows(1);
 			codeBackground = codeArea.getBackground();
 			codeSelectedColor = codeArea.getSelectionColor();
-			label = new JLabel();
+			label = new NodeLabel();
 			label.setOpaque(true);
 			label.setFont(codeArea.getFont());
 			label.setHorizontalAlignment(SwingConstants.LEFT);
-			emptyLabel = new JLabel();
+			emptyLabel = new NodeLabel();
 			emptyLabel.setOpaque(true);
 		}
 
 		@Override
 		public Component getTableCellRendererComponent(JTable table, Object obj,
 				boolean isSelected, boolean hasFocus, int row, int column) {
+			if (obj == null || table == null) {
+				return emptyLabel;
+			}
 			Component comp = makeCell((JNode) obj, column);
 			updateSelection(table, comp, column, isSelected);
 			return comp;
@@ -445,8 +454,9 @@ public abstract class CommonSearchDialog extends JFrame {
 
 		private Component makeCell(JNode node, int column) {
 			if (column == 0) {
+				label.disableHtml(node.disableHtml());
 				label.setText(node.makeLongStringHtml());
-				label.setToolTipText(label.getText());
+				label.setToolTipText(node.getTooltip());
 				label.setIcon(node.getIcon());
 				return label;
 			}

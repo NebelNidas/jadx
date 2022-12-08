@@ -469,6 +469,9 @@ public class ClassNode extends NotificationAttrNode implements ILoadable, ICodeN
 	}
 
 	public void addField(FieldNode fld) {
+		if (fields == null || fields.isEmpty()) {
+			fields = new ArrayList<>(1);
+		}
 		fields.add(fld);
 	}
 
@@ -802,7 +805,9 @@ public class ClassNode extends NotificationAttrNode implements ILoadable, ICodeN
 	}
 
 	public void addCodegenDep(ClassNode dep) {
-		this.codegenDeps = ListUtils.safeAdd(this.codegenDeps, dep);
+		if (!codegenDeps.contains(dep)) {
+			this.codegenDeps = ListUtils.safeAdd(this.codegenDeps, dep);
+		}
 	}
 
 	public int getTotalDepsCount() {

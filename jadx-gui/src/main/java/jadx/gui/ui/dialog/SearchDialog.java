@@ -81,17 +81,28 @@ public class SearchDialog extends CommonSearchDialog {
 
 	public static void search(MainWindow window, SearchPreset preset) {
 		SearchDialog searchDialog = new SearchDialog(window, preset, Collections.emptySet());
-		searchDialog.setVisible(true);
+		show(searchDialog, window);
 	}
 
 	public static void searchInActiveTab(MainWindow window, SearchPreset preset) {
 		SearchDialog searchDialog = new SearchDialog(window, preset, EnumSet.of(SearchOptions.ACTIVE_TAB));
-		searchDialog.setVisible(true);
+		show(searchDialog, window);
 	}
 
 	public static void searchText(MainWindow window, String text) {
 		SearchDialog searchDialog = new SearchDialog(window, SearchPreset.TEXT, Collections.emptySet());
 		searchDialog.initSearchText = text;
+		show(searchDialog, window);
+	}
+
+	private static void show(SearchDialog searchDialog, MainWindow mw) {
+		mw.addLoadListener(loaded -> {
+			if (!loaded) {
+				searchDialog.dispose();
+				return true;
+			}
+			return false;
+		});
 		searchDialog.setVisible(true);
 	}
 
@@ -398,7 +409,7 @@ public class SearchDialog extends CommonSearchDialog {
 			updateTableHighlight();
 			prepareForSearch();
 		});
-		this.searchTask.setResultsLimit(50);
+		this.searchTask.setResultsLimit(mainWindow.getSettings().getSearchResultsPerPage());
 		this.searchTask.setProgressListener(this::updateProgress);
 		this.searchTask.fetchResults();
 		LOG.debug("Total search items count estimation: {}", this.searchTask.getTaskProgress().total());
@@ -553,6 +564,7 @@ public class SearchDialog extends CommonSearchDialog {
 	}
 
 	private void addSearchResult(JNode node) {
+		Objects.requireNonNull(node);
 		synchronized (pendingResults) {
 			UiUtils.notUiThreadGuard();
 			pendingResults.add(node);

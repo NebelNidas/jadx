@@ -66,6 +66,7 @@ public class MethodNode extends NotificationAttrNode implements IMethodDetails, 
 	private List<RegisterArg> argsList;
 	private InsnNode[] instructions;
 	private List<BlockNode> blocks;
+	private int blocksMaxCId;
 	private BlockNode enterBlock;
 	private BlockNode exitBlock;
 	private List<SSAVar> sVars;
@@ -349,6 +350,15 @@ public class MethodNode extends NotificationAttrNode implements IMethodDetails, 
 
 	public void setBasicBlocks(List<BlockNode> blocks) {
 		this.blocks = blocks;
+		int i = 0;
+		for (BlockNode block : blocks) {
+			block.setId(i);
+			i++;
+		}
+	}
+
+	public int getNextBlockCId() {
+		return blocksMaxCId++;
 	}
 
 	public BlockNode getEnterBlock() {

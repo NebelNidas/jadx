@@ -74,12 +74,14 @@ public class JadxSettings extends JadxCLIArgs {
 
 	private boolean showHeapUsageBar = false;
 	private boolean alwaysSelectOpened = false;
+	private boolean useAlternativeFileDialog = false;
 
 	private Map<String, WindowLocation> windowPos = new HashMap<>();
 	private int mainWindowExtendedState = JFrame.NORMAL;
 	private boolean codeAreaLineWrap = false;
 	private int srhResourceSkipSize = 1000;
 	private String srhResourceFileExt = ".xml|.html|.js|.json|.txt";
+	private int searchResultsPerPage = 50;
 	private boolean useAutoSearch = true;
 	private boolean keepCommonDialogOpen = false;
 	private boolean smaliAreaShowBytecode = false;
@@ -266,6 +268,14 @@ public class JadxSettings extends JadxCLIArgs {
 	public void setAlwaysSelectOpened(boolean alwaysSelectOpened) {
 		this.alwaysSelectOpened = alwaysSelectOpened;
 		partialSync(settings -> settings.alwaysSelectOpened = alwaysSelectOpened);
+	}
+
+	public boolean isUseAlternativeFileDialog() {
+		return useAlternativeFileDialog;
+	}
+
+	public void setUseAlternativeFileDialog(boolean useAlternativeFileDialog) {
+		this.useAlternativeFileDialog = useAlternativeFileDialog;
 	}
 
 	public String getExcludedPackages() {
@@ -548,6 +558,14 @@ public class JadxSettings extends JadxCLIArgs {
 
 	public void setSrhResourceFileExt(String all) {
 		srhResourceFileExt = all.trim();
+	}
+
+	public int getSearchResultsPerPage() {
+		return searchResultsPerPage;
+	}
+
+	public void setSearchResultsPerPage(int searchResultsPerPage) {
+		this.searchResultsPerPage = searchResultsPerPage;
 	}
 
 	public boolean isUseAutoSearch() {
