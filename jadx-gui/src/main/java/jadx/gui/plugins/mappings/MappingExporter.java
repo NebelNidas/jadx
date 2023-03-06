@@ -1,6 +1,7 @@
 package jadx.gui.plugins.mappings;
 
 import java.io.IOException;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.AbstractMap.SimpleEntry;
 import java.util.ArrayList;
@@ -128,10 +129,9 @@ public class MappingExporter {
 
 		try {
 			if (mappingFormat.hasSingleFile()) {
-				if (path.toFile().exists()) {
-					path.toFile().delete();
-				}
-				path.toFile().createNewFile();
+				FileUtils.deleteFileIfExists(path);
+				FileUtils.makeDirsForFile(path);
+				Files.createFile(path);
 			} else {
 				FileUtils.makeDirs(path);
 			}

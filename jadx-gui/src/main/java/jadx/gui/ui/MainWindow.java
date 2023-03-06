@@ -693,9 +693,12 @@ public class MainWindow extends JFrame {
 		update();
 		updateLiveReload(project.isEnableLiveReload());
 		BreakpointManager.init(project.getFilePaths().get(0).toAbsolutePath().getParent());
+
+		List<EditorViewState> openTabs = project.getOpenTabs(this);
 		backgroundExecutor.execute(NLS.str("progress.load"),
-				this::restoreOpenTabs,
+				() -> preLoadOpenTabs(openTabs),
 				status -> {
+					restoreOpenTabs(openTabs);
 					runInitialBackgroundJobs();
 					notifyLoadListeners(true);
 				});
@@ -1731,8 +1734,8 @@ public class MainWindow extends JFrame {
 		project.saveOpenTabs(tabbedPane.getEditorViewStates(), tabbedPane.getSelectedIndex());
 	}
 
-	private void restoreOpenTabs() {
-		List<EditorViewState> openTabs = project.getOpenTabs(this);
+	private void restoreOpenTabs(List<EditorViewState> openTabs) {
+		UiUtils.uiThreadGuard();
 		if (openTabs.isEmpty()) {
 			return;
 		}
@@ -1743,6 +1746,18 @@ public class MainWindow extends JFrame {
 			tabbedPane.setSelectedIndex(project.getActiveTab());
 		} catch (Exception e) {
 			LOG.warn("Failed to restore active tab", e);
+		}
+	}
+
+	private void preLoadOpenTabs(List<EditorViewState> openTabs) {
+		UiUtils.notUiThreadGuard();
+		for (EditorViewState tabState : openTabs) {
+			JNode node = tabState.getNode();
+			try {
+				node.getCodeInfo();
+			} catch (Exception e) {
+				LOG.warn("Failed to preload code for node: {}", node, e);
+			}
 		}
 	}
 
