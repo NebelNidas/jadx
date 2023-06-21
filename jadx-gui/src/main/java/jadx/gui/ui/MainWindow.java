@@ -78,11 +78,14 @@ import org.slf4j.LoggerFactory;
 import ch.qos.logback.classic.Level;
 
 import jadx.api.JadxArgs;
+import jadx.api.JadxDecompiler;
 import jadx.api.JavaNode;
 import jadx.api.ResourceFile;
+import jadx.api.plugins.events.IJadxEvents;
 import jadx.api.plugins.utils.CommonFileUtils;
 import jadx.core.Jadx;
 import jadx.core.export.TemplateFile;
+import jadx.core.plugins.events.JadxEventsImpl;
 import jadx.core.utils.ListUtils;
 import jadx.core.utils.StringUtils;
 import jadx.core.utils.exceptions.JadxRuntimeException;
@@ -101,6 +104,7 @@ import jadx.gui.plugins.quark.QuarkDialog;
 import jadx.gui.settings.JadxProject;
 import jadx.gui.settings.JadxSettings;
 import jadx.gui.settings.ui.JadxSettingsWindow;
+import jadx.gui.settings.ui.plugins.InstallPluginDialog;
 import jadx.gui.treemodel.ApkSignature;
 import jadx.gui.treemodel.JClass;
 import jadx.gui.treemodel.JLoadableNode;
@@ -479,6 +483,7 @@ public class MainWindow extends JFrame {
 
 	private void loadFiles(Runnable onFinish) {
 		if (project.getFilePaths().isEmpty()) {
+			tabbedPane.showNode(new StartPageNode());
 			return;
 		}
 		AtomicReference<Exception> wrapperException = new AtomicReference<>();
@@ -1120,7 +1125,7 @@ public class MainWindow extends JFrame {
 
 		pluginsMenu = new JMenu(NLS.str("menu.plugins"));
 		pluginsMenu.setMnemonic(KeyEvent.VK_P);
-		pluginsMenu.setVisible(false);
+		resetPluginsMenu();
 
 		JMenu tools = new JMenu(NLS.str("menu.tools"));
 		tools.setMnemonic(KeyEvent.VK_T);
@@ -1636,7 +1641,31 @@ public class MainWindow extends JFrame {
 		return pluginsMenu;
 	}
 
+	public void resetPluginsMenu() {
+		pluginsMenu.removeAll();
+		pluginsMenu.add(new ActionHandler(() -> new InstallPluginDialog(this).setVisible(true))
+				.withNameAndDesc(NLS.str("preferences.plugins.install")));
+	}
+
+	public void addToPluginsMenu(Action item) {
+		if (pluginsMenu.getMenuComponentCount() == 1) {
+			pluginsMenu.addSeparator();
+		}
+		pluginsMenu.add(item);
+	}
+
 	public RenameMappingsGui getRenameMappings() {
 		return renameMappings;
+	}
+
+	/**
+	 * Events instance if decompiler not yet available
+	 */
+	private final IJadxEvents fallbackEvents = new JadxEventsImpl();
+
+	public IJadxEvents events() {
+		return wrapper.getCurrentDecompiler()
+				.map(JadxDecompiler::events)
+				.orElse(fallbackEvents);
 	}
 }

@@ -10,7 +10,7 @@ import org.jetbrains.annotations.Nullable;
 import net.fabricmc.mappingio.format.MappingFormat;
 
 import jadx.api.plugins.options.OptionDescription;
-import jadx.api.plugins.options.OptionDescription.OptionFlag;
+import jadx.api.plugins.options.OptionFlag;
 import jadx.api.plugins.options.impl.BaseOptionsParser;
 import jadx.api.plugins.options.impl.JadxOptionDescription;
 
@@ -38,7 +38,7 @@ public class RenameMappingsOptions extends BaseOptionsParser {
 	public List<OptionDescription> getOptionsDescriptions() {
 		return Arrays.asList(
 				new JadxOptionDescription(FORMAT_OPT, "mapping format", "auto", getMappingFormats())
-						.withFlag(OptionFlag.PER_PROJECT),
+						.withFlags(OptionFlag.PER_PROJECT, OptionFlag.DISABLE_IN_GUI),
 				JadxOptionDescription.booleanOption(INVERT_OPT, "invert mapping", false)
 						.withFlag(OptionFlag.PER_PROJECT));
 	}
